@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/booking_model.dart';
 import '../../models/court_model.dart';
+import '../../utils/error_handler.dart';
 
 class PaymentScreen extends StatefulWidget {
   final BookingModel booking;
@@ -235,6 +236,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
+        _showSnackbar(ErrorHandler.getMessage(e), isError: true);
+
       if (!mounted) return;
       _showSnackbar('Gagal upload bukti pembayaran', isError: true);
     } finally {

@@ -7,6 +7,7 @@ import '../../models/profile_model.dart';
 import '../auth/login_screen.dart';
 import 'manage_booking_screen.dart';
 import 'manage_court_screen.dart';
+import 'report_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -366,6 +367,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
             // Tab 3 - Kelola Lapangan
             const ManageCourtScreen(),
+
+            // Tab 4 - Laporan
+            const ReportScreen(),
           ],
         ),
       ),
@@ -391,6 +395,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             icon: Icon(Icons.sports_outlined),
             activeIcon: Icon(Icons.sports),
             label: 'Lapangan',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
+            label: 'Laporan',
           ),
         ],
       ),

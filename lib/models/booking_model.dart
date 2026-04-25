@@ -14,6 +14,11 @@ class BookingModel {
   final String? startTime;
   final String? endTime;
 
+  // Data payment
+  final String? paymentStatus;
+  final String? paymentMethod;
+  final String? paymentProof;
+
   BookingModel({
     required this.id,
     required this.userId,
@@ -27,9 +32,21 @@ class BookingModel {
     this.sportType,
     this.startTime,
     this.endTime,
+    this.paymentStatus,
+    this.paymentMethod,
+    this.paymentProof,
   });
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
+    final payment = json['payments'];
+    Map<String, dynamic>? paymentData;
+
+    if (payment is List && payment.isNotEmpty) {
+      paymentData = payment[0] as Map<String, dynamic>;
+    } else if (payment is Map<String, dynamic>) {
+      paymentData = payment;
+    }
+
     return BookingModel(
       id: json['id'],
       userId: json['user_id'],
@@ -39,11 +56,13 @@ class BookingModel {
       status: json['status'],
       totalPrice: (json['total_price'] as num).toDouble(),
       createdAt: DateTime.parse(json['created_at']),
-      // Ambil data join kalau ada
       courtName: json['courts'] != null ? json['courts']['name'] : null,
       sportType: json['courts'] != null ? json['courts']['sport_type'] : null,
       startTime: json['time_slots'] != null ? json['time_slots']['start_time'] : null,
       endTime: json['time_slots'] != null ? json['time_slots']['end_time'] : null,
+      paymentStatus: paymentData?['status'],
+      paymentMethod: paymentData?['payment_method_detail'],
+      paymentProof: paymentData?['payment_proof'],
     );
   }
 

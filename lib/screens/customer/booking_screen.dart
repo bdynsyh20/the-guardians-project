@@ -5,6 +5,8 @@ import '../../services/court_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/auth_service.dart';
 import 'payment_screen.dart';
+import '../../utils/error_handler.dart';
+
 
 class BookingScreen extends StatefulWidget {
   final CourtModel court;
@@ -20,10 +22,28 @@ class _BookingScreenState extends State<BookingScreen> {
   final _authService = AuthService();
 
   List<TimeSlotModel> _slots = [];
+  List<String> _bookedSlotIds = []; // tambah ini
   TimeSlotModel? _selectedSlot;
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = true;
   bool _isBooking = false;
+  bool _isPastSlot(TimeSlotModel slot) {
+    final now = DateTime.now();
+    final isToday = _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+
+    if (!isToday) return false;
+
+    final parts = slot.startTime.split(':');
+    final slotHour = int.parse(parts[0]);
+    final slotMinute = int.parse(parts[1].split(':')[0]);
+    final slotTime = DateTime(
+      now.year, now.month, now.day,
+      slotHour, slotMinute,
+    );
+    return slotTime.isBefore(now);
+  }
 
   @override
   void initState() {
@@ -40,12 +60,48 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => _isLoading = true);
     try {
       final dayType = _getDayType(_selectedDate);
-      final slots = await _courtService.getTimeSlots(
-        widget.court.id,
-        dayType: dayType,
-      );
+
+      final results = await Future.wait([
+        _courtService.getTimeSlots(
+          widget.court.id,
+          dayType: dayType,
+        ),
+        _bookingService.getBookedSlots(
+          courtId: widget.court.id,
+          bookingDate: _selectedDate,
+        ),
+      ]);
+
+      final allSlots = results[0] as List<TimeSlotModel>;
+      final bookedIds = results[1] as List<String>;
+
+      // Filter slot yang sudah lewat kalau hari ini
+      final now = DateTime.now();
+      final isToday = _selectedDate.year == now.year &&
+          _selectedDate.month == now.month &&
+          _selectedDate.day == now.day;
+
       setState(() {
-        _slots = slots;
+        _slots = allSlots;
+        _bookedSlotIds = bookedIds;
+
+        // Kalau hari ini, tambahkan slot yang sudah lewat ke bookedSlotIds
+        if (isToday) {
+          for (final slot in allSlots) {
+            final parts = slot.startTime.split(':');
+            final slotHour = int.parse(parts[0]);
+            final slotMinute = int.parse(parts[1].split(':')[0]);
+            final slotTime = DateTime(
+              now.year, now.month, now.day,
+              slotHour, slotMinute,
+            );
+            // Kalau jam slot sudah lewat dari sekarang
+            if (slotTime.isBefore(now) && !_bookedSlotIds.contains(slot.id)) {
+              _bookedSlotIds.add(slot.id);
+            }
+          }
+        }
+
         _isLoading = false;
       });
     } catch (e) {
@@ -198,7 +254,18 @@ class _BookingScreenState extends State<BookingScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      _showSnackbar('Gagal booking, coba lagi', isError: true);
+      _showSnackbar(ErrorHandler.getMessage(e), isError: true);
+      
+      if (!mounted) return;
+      final message = e.toString().replaceAll('Exception: ', '');
+      _showSnackbar(
+        message.contains('sudah dipesan')
+            ? 'Maaf, slot ini baru saja dipesan orang lain!'
+            : 'Gagal booking, coba lagi',
+        isError: true,
+      );
+      // Reload slots supaya tampilan terupdate
+      _loadSlots();
     } finally {
       if (mounted) setState(() => _isBooking = false);
     }
@@ -447,34 +514,40 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _buildSlotItem(TimeSlotModel slot, Color color) {
     final isSelected = _selectedSlot?.id == slot.id;
+    final isBooked = _bookedSlotIds.contains(slot.id);
+
     return GestureDetector(
-      onTap: slot.isAvailable
-          ? () => setState(() => _selectedSlot = slot)
-          : null,
+      onTap: isBooked || !slot.isAvailable
+          ? null
+          : () => setState(() => _selectedSlot = slot),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? color : Colors.white,
+          color: isBooked
+              ? Colors.grey[100]
+              : isSelected
+                  ? color
+                  : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? color
-                : slot.isAvailable
-                    ? color.withOpacity(0.2)
-                    : Colors.grey[200]!,
+            color: isBooked
+                ? Colors.grey[300]!
+                : isSelected
+                    ? color
+                    : color.withOpacity(0.2),
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
             Icon(
-              Icons.access_time,
-              color: isSelected
-                  ? Colors.white
-                  : slot.isAvailable
-                      ? color
-                      : Colors.grey,
+              isBooked ? Icons.block : Icons.access_time,
+              color: isBooked
+                  ? Colors.grey[400]
+                  : isSelected
+                      ? Colors.white
+                      : color,
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -484,41 +557,43 @@ class _BookingScreenState extends State<BookingScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
-                  color: isSelected
-                      ? Colors.white
-                      : slot.isAvailable
-                          ? Colors.black87
-                          : Colors.grey,
+                  color: isBooked
+                      ? Colors.grey[400]
+                      : isSelected
+                          ? Colors.white
+                          : Colors.black87,
                 ),
               ),
             ),
-            Text(
-              _formatPrice(slot.price),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: isSelected ? Colors.white : color,
-              ),
-            ),
-            if (!slot.isAvailable) ...[
-              const SizedBox(width: 8),
+
+            // Badge status
+            // Badge status
+            if (isBooked)
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 2),
+                    horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.red[50],
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Penuh',
+                  _isPastSlot(slot) ? 'Sudah Lewat' : 'Sudah Dipesan',
                   style: TextStyle(
                     color: Colors.red[400],
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              )
+            else
+              Text(
+                _formatPrice(slot.price),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: isSelected ? Colors.white : color,
+                ),
               ),
-            ],
           ],
         ),
       ),

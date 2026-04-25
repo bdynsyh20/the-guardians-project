@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import 'login_screen.dart';
+import '../../utils/error_handler.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -30,11 +31,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
+  }
+
+  bool _isValidPhone(String phone) {
+    return RegExp(r'^[0-9]{10,13}$').hasMatch(phone);
+  }
+
   Future<void> _register() async {
-    if (_nameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
-      _showSnackbar('Nama, email, dan password wajib diisi', isError: true);
+    // Validasi nama
+    if (_nameController.text.isEmpty) {
+      _showSnackbar('Nama tidak boleh kosong', isError: true);
+      return;
+    }
+
+    // Validasi email
+    if (_emailController.text.isEmpty) {
+      _showSnackbar('Email tidak boleh kosong', isError: true);
+      return;
+    }
+
+    if (!_isValidEmail(_emailController.text.trim())) {
+      _showSnackbar('Format email tidak valid', isError: true);
+      return;
+    }
+
+    // Validasi phone (kalau diisi)
+    if (_phoneController.text.isNotEmpty &&
+        !_isValidPhone(_phoneController.text.trim())) {
+      _showSnackbar('Nomor HP harus 10-13 digit angka', isError: true);
+      return;
+    }
+
+    // Validasi password
+    if (_passwordController.text.isEmpty) {
+      _showSnackbar('Password tidak boleh kosong', isError: true);
       return;
     }
 
@@ -59,7 +91,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (!mounted) return;
-
       _showSnackbar('Akun berhasil dibuat! Silakan login');
 
       await Future.delayed(const Duration(seconds: 1));
@@ -71,7 +102,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      _showSnackbar('Gagal daftar, email mungkin sudah digunakan', isError: true);
+      _showSnackbar(ErrorHandler.getMessage(e), isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/customer/home_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
 
+final navigatorKey = GlobalKey<NavigatorState>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await dotenv.load(fileName: '.env');
+
   await Supabase.initialize(
-    url: 'https://dcuyjsnyakwhtjebvqot.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjdXlqc255YWt3aHRqZWJ2cW90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3ODUzNzUsImV4cCI6MjA5MTM2MTM3NX0.jgbOb-SL4BBhCBWEVBb6D7oHpN6mAPqHWUCEQYTMhS4',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    authOptions: const FlutterAuthClientOptions(
+      authFlowType: AuthFlowType.pkce,
+    ),
   );
 
   runApp(const MyApp());
@@ -18,19 +25,39 @@ Future<void> main() async {
 
 final supabase = Supabase.instance.client;
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Listener session expired
+    supabase.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedOut) {
+        navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Arena Booking',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      // Cek apakah user sudah login atau belum saat buka app
       home: supabase.auth.currentUser == null
           ? const LoginScreen()
           : const AuthWrapper(),
@@ -38,7 +65,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Widget ini mengecek role user dan mengarahkan ke halaman yang sesuai
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -57,30 +83,40 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final profile = await supabase
-        .from('profiles')
-        .select()
-        .eq('id', user.id)
-        .single();
+    try {
+      final profile = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .single();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    // Arahkan ke halaman sesuai role
-    if (profile['role'] == 'admin') {
+      if (profile['role'] == 'admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminHomeScreen()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      await supabase.auth.signOut();
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const AdminHomeScreen()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
   }
 }

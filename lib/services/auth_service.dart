@@ -74,6 +74,18 @@ class AuthService {
     await _supabase.auth.signOut();
   }
 
+  // Kirim email reset password
+  Future<void> resetPassword(String email) async {
+    try {
+      await _supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'io.supabase.sport_center_projects://login-callback',
+      );
+    } catch (e) {
+      throw Exception('Gagal kirim email reset: $e');
+    }
+  }
+
   // Cek apakah user sedang login
   bool isLoggedIn() {
     return _supabase.auth.currentUser != null;
